@@ -1,0 +1,131 @@
+#include<ESP8266WiFi.h>
+#include<ESP8266WebServer.h>
+#include<ArduinoJson.h>
+#include<Servo.h>
+Servo servo;
+int rm1 = D0;
+int rm2 = D1;
+int lm1 = D2;
+int lm2 = D3;
+int standby = D4;
+int lms = D5;
+int rms = D6;
+int tray = D7;
+ESP8266WebServer server;
+
+const char* ssid = "your ssid";
+const char* password = "your password";
+
+void setup() {
+  // put your setup code here, to run once:
+  //right motor
+  servo.attach(tray);
+  pinMode(tray, OUTPUT); 
+  pinMode(lm1, OUTPUT);
+  pinMode(lm2, OUTPUT);
+  pinMode(lms, OUTPUT);
+  //left motor
+  pinMode(rm1, OUTPUT);
+  pinMode(rm2, OUTPUT);
+  pinMode(rms, OUTPUT);
+  pinMode(standby, OUTPUT);
+  Serial.begin(9600);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.println('.');
+    delay(500);
+  }
+  Serial.print(" ");
+  Serial.print(WiFi.localIP());
+  server.on("/", []() {
+    server.send(200, "text/plain", "Hello world!");
+  });
+  server.begin();
+  server.on("/jdrive", jdrive);
+}
+void loop() {
+
+  // put your main code here, to run repeatedly:
+  server.handleClient();
+}
+void jdrive()
+{
+  server.send(204, "recived");
+  digitalWrite(standby, HIGH);
+  String data = server.arg("plain");
+  StaticJsonDocument<200> jObject;
+  deserializeJson(jObject, data);
+  String Lspds = jObject["leftspeed"];
+  String Rspds = jObject["rightspeed"];
+  String path = jObject["path"];
+  String turnTime = jObject["turntime"];
+  String blocktimes = jObject["blocktime"];
+  int rspd = Rspds.toInt();
+  int lspd = Lspds.toInt();
+  int blocktime = blocktimes.toInt();
+  int turntime = turnTime.toInt();
+  char t = path[0];
+  if (t == 'F') {
+
+    analogWrite(rms, rspd);
+    analogWrite(lms, lspd);
+    digitalWrite(rm1, HIGH);
+    digitalWrite(rm2, LOW);
+    digitalWrite(lm1, HIGH);
+    digitalWrite(lm2, LOW);
+    Serial.print('F');
+    delay(blocktime);
+  }
+  else if (t == 'B') {
+    analogWrite(rms, rspd);
+    analogWrite(lms, lspd);
+    digitalWrite(lm1, LOW);
+    digitalWrite(lm2, HIGH);
+    digitalWrite(rm1, LOW);
+    digitalWrite(rm2, HIGH);
+    Serial.print('B');
+    delay(blocktime);
+  }
+  else if (t == 'L') {
+    analogWrite(rms, rspd);
+    analogWrite(lms, lspd);
+    digitalWrite(lm1, HIGH);
+    digitalWrite(lm2, LOW);
+    digitalWrite(rm1, LOW);
+    digitalWrite(rm2, HIGH);
+    Serial.print('L');
+    delay(turntime);
+  }
+  else if (t == 'R') {
+    analogWrite(rms, rspd);
+    analogWrite(lms, lspd);
+    digitalWrite(lm1, LOW);
+    digitalWrite(lm2, HIGH);
+    digitalWrite(rm1, HIGH);
+    digitalWrite(rm2, LOW);
+    Serial.print('R');
+    delay(turntime);
+  }
+  else if (t == 'S') {    //STOP (all motors stop)
+    digitalWrite(lm1, LOW);
+    digitalWrite(lm2, LOW);
+    digitalWrite(rm1, LOW);
+    digitalWrite(rm2, LOW);
+    Serial.print('S');
+    delay(blocktime);
+  }
+  else if (t = 'D') {
+    servo.write(0);
+    delay(500);
+    servo.write(90);
+    delay(500);
+    servo.write(0);
+    
+  }
+  digitalWrite(lm1, LOW);
+  digitalWrite(lm2, LOW);
+  digitalWrite(rm1, LOW);
+  digitalWrite(rm2, LOW);
+  digitalWrite(standby, LOW);
+  Serial.println("done");
+}

@@ -1,0 +1,354 @@
+bbos=(array([[[437., 434.],
+        [391., 415.],
+        [407., 369.],
+        [451., 389.]]], dtype=float32), array([[[254., 202.],
+        [382., 286.],
+        [293., 390.],
+        [171., 314.]]], dtype=float32))
+id=[[4],[3]]
+
+___________________________________________________________________________________________________________________________
+import test
+import cv2
+import math
+import numpy.linalg as la
+import cv2.aruco as aruco
+import numpy as np
+paths=[]
+pat=[]
+def Distance(center,point):
+    return  int(((((center[0] - point[0]) ** 2) + ((center[1] - point[1]) ** 2)) ** 0.5))
+def vector(a,b):
+    distance=[a[0]-b[0],a[1]-b[1]]
+    nor=math.sqrt(distance[0]**2+distance[1]**2)
+    direction=[distance[0]/nor,distance[1]/nor]
+    return direction
+def angle(v1,v2):
+    vector1=vector(v1[0],v1[1])
+    vector2=vector(v2[0],v2[1])
+    cos=np.dot(vector1,vector2)
+    sin=la.norm(np.cross(vector1,vector2))
+    return np.arctan2(sin,cos)
+def midpoint(x,y):
+    a=(x[0]+y[0])/2
+    b=(y[1]+x[1])/2
+    return [int(a),int(b)]
+class bot():
+    temp=[]
+    goal=22
+    id=0
+    rect=[]
+    path=[]
+    completed_path=[]
+    present_point=[]
+    future_point=[]
+    state=""
+    midpoints=[]
+    angles=[]
+    center=[]
+    d=0
+    #turntime=0
+    #blocktime=0
+    def __init__(self):
+        global paths,pat
+        a=False
+        self.id=int(4)
+        cap = cv2.VideoCapture(0)
+        while True:
+            worked, img = cap.read()
+            cv2.imshow("image", img)
+            cv2.setMouseCallback("image",self.selectedpoints)
+            k = cv2.waitKey(33)
+            if len(self.path)==3:  # Esc key to stop
+                self.future_point=paths[0]
+                #paths.reverse()
+                #paths.pop(0)
+                #paths[0].reverse()
+                #self.completed_path=paths
+                break
+        print(self.path)
+
+        cv2.destroyAllWindows()
+
+    def selectedpoints(self,event, x, y, flags, param):
+        global paths, pat
+        pat.append([x, y])
+        if event == cv2.EVENT_LBUTTONDOWN and len(paths) == 0:
+            paths.append([x, y])
+        elif event == cv2.EVENT_LBUTTONDOWN and len(paths) == 1:
+            paths.append([[x, y]])
+        elif event == cv2.EVENT_LBUTTONDOWN and len(paths) > 1:
+            paths[1].append([x, y])
+        elif event == cv2.EVENT_RBUTTONDOWN:
+            paths.append([x, y])
+            self.path = paths
+            self.temp = self.path
+            print(self.path)
+            print(self.temp)
+    def driver(self,point):
+        distance = Distance(self.center,point)
+        forwardangle = self.angles[0]
+        leftangle = self.angles[3]
+        rightangle = self.angles[1]
+        backangle = self.angles[2]
+        if forwardangle <0.1:
+
+            rs=1000
+            ls=1000
+            test.forward()
+        else:
+            if leftangle > rightangle:
+                test.right()
+            elif rightangle > leftangle:
+                test.left()
+    def find(self,bbos,ids,my_id):
+        index = ids.index(my_id)
+        self.id = ids[index]
+        self.rect= [[int(i[0]), int(i[1])] for i in (bbos[index][0])]
+        self.midpoints=[midpoint(self.rect[0],self.rect[1]),midpoint(self.rect[1],self.rect[2]),midpoint(self.rect[2],self.rect[3]),midpoint(self.rect[3],self.rect[0])]
+        self.center = (midpoint(self.rect[0], self.rect[2]))
+        self.angles = [angle([self.center, self.future_point], [self.center, i]) for i in self.midpoints]
+    def pathmaker(self):
+        global paths
+        if len(self.path)==3:
+            point=self.path[0]
+            self.d=Distance(self.center,point)
+            if self.d < self.goal :
+                #self.completed_path.insert(0,[point])
+                self.path.remove(point)
+                self.future_point=self.path[0][0]
+                self.state="advancing"
+            else:
+                self.driver(point)
+        elif len(self.path)==2:
+            if len(self.path[0])>0:
+                point=self.path[0][0]
+                self.d=Distance(self.center,point)
+                if self.d < self.goal:
+                    #self.completed_path.insert(0,[point])
+                    self.path[0].remove(point)
+                    self.present_point=point
+                    if len(self.path[0])>0:
+                        self.future_point=self.path[0][0]
+                    else:
+                        self.future_point=self.path[1]
+                        self.path.pop(0)
+                else:
+                    self.driver(point)
+            else:
+                self.path.pop(0)
+        elif len(self.path) == 1:
+            point = self.path[0]
+            self.d = Distance(self.center, point)
+            if self.d < self.goal and self.state=="advancing":
+                self.state = "retreating"
+                paths=self.temp
+                print(paths)
+                paths.reverse()
+                paths.pop(0)
+                paths[0].reverse()
+                self.path=paths
+            elif self.d< self.goal and self.state=="retreating":
+                self.state="idle"
+            else:
+                self.driver(point)
+    def handle(self,bbos,ids):
+        self.find(bbos,[ids],self.id)
+        self.pathmaker()
+
+
+
+
+
+________________________________________________________________________________________________________________
+import cv2
+import math
+import numpy.linalg as la
+import cv2.aruco as aruco
+import numpy as np
+import test
+import bot
+import os
+point=[0,0]
+bot1=bot.bot()
+def driver(angles,point,center):
+    distance= ((((center[0] - point[0]) ** 2) + ((center[1] - point[1]) ** 2)) ** 0.5)
+    forwardangle=angles[0]
+    leftangle=angles[3]
+    rightangle=angles[1]
+    backangle=angles[2]
+    if forwardangle<1:
+        test.forward()
+    else:
+        if leftangle>rightangle:
+            test.right()
+        elif rightangle>leftangle:
+            test.left()
+def vector(a,b):
+    distance=[a[0]-b[0],a[1]-b[1]]
+    nor=math.sqrt(distance[0]**2+distance[1]**2)
+    direction=[distance[0]/nor,distance[1]/nor]
+    return direction
+def angle(v1,v2):
+    vector1=vector(v1[0],v1[1])
+    vector2=vector(v2[0],v2[1])
+    cos=np.dot(vector1,vector2)
+    sin=la.norm(np.cross(vector1,vector2))
+    return np.arctan2(sin,cos)
+def midpoint(x,y):
+    a=(x[0]+y[0])/2
+    b=(y[1]+x[1])/2
+    return [int(a),int(b)]
+def selectedpoint(event,x,y,flags,param):
+    global point
+    if event==cv2.EVENT_LBUTTONDOWN:
+        point.append([x,y])
+
+def findArucoMarkers(img, markerSize=6,TotalMarkers=250,draw=True):
+    imgGray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    key =getattr(aruco,f'DICT_{markerSize}X{markerSize}_{TotalMarkers}')
+    arucoDict=aruco.Dictionary_get(key)
+    arucoParam= aruco.DetectorParameters_create()
+    bbos,ids,rejected=aruco.detectMarkers(imgGray,arucoDict,parameters=arucoParam)
+    # to make  a list of box coordinates and its keys example : box = [[[x,y],[x,y],[x,y],[x,y]],[id]]
+    if (len(bbos)>0):
+        bot1.handle(bbos, ids)
+        for bbox in bbos:
+            rect=[[],[]]
+            for id,box in enumerate(bbox):
+                #rect[1].append(ids[0][id])
+                for i in box:
+                    i=[int(x)for x in i ]
+                    rect[0].append(i)
+            #for c,t in enumerate(rect[0]):
+             #   cv2.drawMarker(img,t,(0,0,225))
+              #  cv2.putText(img,str(c),t,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+            if draw:
+                #aruco.drawDetectedMarkers(img,bbox)
+                cv2.drawMarker(img, point, (0, 0, 225))
+                #[cv2.line(img,i,point,(0,225,0))for i in rect[0]]
+                midpoints=[midpoint(rect[0][0],rect[0][1]),midpoint(rect[0][1],rect[0][2]),midpoint(rect[0][2],rect[0][3]),midpoint(rect[0][3],rect[0][0])]
+                [cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                [cv2.putText(img,str(i),k,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for i,k in enumerate(midpoints)]
+                center=(midpoint(rect[0][0],rect[0][2]))
+                cv2.drawMarker(img,center,(0,0,225))
+                cv2.line(img, bot1.future_point, center, (0, 225, 0))
+                cv2.line(img,center,midpoints[2],(0,225,0))
+                #angles=[angle([center,point],[center,i])for i in midpoints]
+                #cv2.putText(img,str(angles),point,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+                #driver(angles,center,point)
+                #[cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                #distances=[distance(point,i)for i in rect[0]]
+                #[cv2.putText(img,str(int(i)),(point[0],point[1]+(c*10)),cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for c,i in enumerate(distances)]
+
+cap=cv2.VideoCapture(0)
+while True:
+    worked,img=cap.read()
+    findArucoMarkers(img)
+    cv2.imshow("image", img)
+    cv2.waitKey(1)
+_____________________________________________________________________________________________________________________________________
+        for bbox in bbos:
+            rect=[[],[]]
+            for id,box in enumerate(bbox):
+                #rect[1].append(ids[0][id])
+                for i in box:
+                    i=[int(x)for x in i ]
+                    rect[0].append(i)
+            #for c,t in enumerate(rect[0]):
+             #   cv2.drawMarker(img,t,(0,0,225))
+              #  cv2.putText(img,str(c),t,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+            if draw:
+                #aruco.drawDetectedMarkers(img,bbox)
+                cv2.drawMarker(img, point, (0, 0, 225))
+                #[cv2.line(img,i,point,(0,225,0))for i in rect[0]]
+                midpoints=[midpoint(rect[0][0],rect[0][1]),midpoint(rect[0][1],rect[0][2]),midpoint(rect[0][2],rect[0][3]),midpoint(rect[0][3],rect[0][0])]
+                [cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                [cv2.putText(img,str(i),k,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for i,k in enumerate(midpoints)]
+                center=(midpoint(rect[0][0],rect[0][2]))
+                cv2.drawMarker(img,center,(0,0,225))
+                cv2.line(img, bot1.future_point, center, (0, 225, 0))
+                cv2.line(img,center,midpoints[2],(0,225,0))
+                #angles=[angle([center,point],[center,i])for i in midpoints]
+                #cv2.putText(img,str(angles),point,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+                #driver(angles,center,point)
+                #[cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                #distances=[distance(point,i)for i in rect[0]]
+                #[cv2.putText(img,str(int(i)),(point[0],point[1]+(c*10)),cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for c,i in enumerate(distances)]
+_______________________________________________________________________________________________________________________________________________________
+        for bbox in bbos:
+            rect=[[],[]]
+            for id,box in enumerate(bbox):
+                #rect[1].append(ids[0][id])
+                for i in box:
+                    i=[int(x)for x in i ]
+                    rect[0].append(i)
+            #for c,t in enumerate(rect[0]):
+             #   cv2.drawMarker(img,t,(0,0,225))
+              #  cv2.putText(img,str(c),t,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+            if draw:
+                #aruco.drawDetectedMarkers(img,bbox)
+                cv2.drawMarker(img, point, (0, 0, 225))
+                #[cv2.line(img,i,point,(0,225,0))for i in rect[0]]
+                midpoints=[midpoint(rect[0][0],rect[0][1]),midpoint(rect[0][1],rect[0][2]),midpoint(rect[0][2],rect[0][3]),midpoint(rect[0][3],rect[0][0])]
+                [cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                [cv2.putText(img,str(i),k,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for i,k in enumerate(midpoints)]
+                center=(midpoint(rect[0][0],rect[0][2]))
+                cv2.drawMarker(img,center,(0,0,225))
+                cv2.line(img, bot1.future_point, center, (0, 225, 0))
+                cv2.line(img,center,midpoints[2],(0,225,0))
+                #angles=[angle([center,point],[center,i])for i in midpoints]
+                #cv2.putText(img,str(angles),point,cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))
+                #driver(angles,center,point)
+                #[cv2.drawMarker(img,i,(0,0,225))for i in midpoints]
+                #distances=[distance(point,i)for i in rect[0]]
+                #[cv2.putText(img,str(int(i)),(point[0],point[1]+(c*10)),cv2.FONT_HERSHEY_PLAIN,1,(0,0,225))for c,i in enumerate(distances)]
+                ___________________________________________________________________________________________________________________________
+                    def __init__(self):
+        global paths,pat
+        self.id=int(4)
+        cap = cv2.VideoCapture(0)
+        while True:
+            worked, img = cap.read()
+            cv2.imshow("image", img)
+            cv2.setMouseCallback("image",self.selectedpoints)
+            k = cv2.waitKey(33)
+            if len(self.path)==3:  # Esc key to stop
+                self.future_point=paths[0]
+                #paths.reverse()
+                #paths.pop(0)
+                #paths[0].reverse()
+                #self.completed_path=paths
+                break
+        paths=[]
+        print(self.path)
+
+        cv2.destroyAllWindows()
+       _____________________________________________________________________________________________________
+       place and matrix point pune(3,1)
+ pune(3,1) :
+[[[128, 319], [[236, 319], [236, 355]], [237, 386]], [[[236, 355], [236, 319]], [128, 319]]]
+place and matrix pointahemadabad(3,2)
+ahemadabad(3,2) :
+[[[137, 319], [[402, 329], [402, 365]], [401, 399]], [[[402, 365], [402, 329]], [137, 319]]]
+place and matrix pointjaipur(3,3)
+jaipur(3,3) :
+[[[128, 319], [[543, 320], [543, 350]], [541, 379]], [[[543, 350], [543, 320]], [128, 319]]]
+place and matrix pointchennai(2,1)
+chennai(2,1) :
+[[[128, 319], [[234, 319], [243, 267]], [246, 230]], [[[243, 267], [234, 319]], [128, 319]]]
+place and matrix pointbangluru(2,2)
+bangluru(2,2) :
+[[[130, 318], [[404, 323], [406, 268]], [407, 238]], [[[406, 268], [404, 323]], [130, 318]]]
+place and matrix pointhyderabad(2,3)
+hyderabad(2,3) :
+[[[129, 320], [[550, 320], [557, 274]], [559, 242]], [[[557, 274], [550, 320]], [129, 320]]]
+place and matrix pointmumbai(3,1)
+mumbai(3,1) :
+[[[126, 318], [[325, 319], [329, 79], [301, 78]], [261, 75]], [[[301, 78], [329, 79], [325, 319]], [126, 318]]]
+place and matrix pointdelhi(1,2)
+delhi(1,2) :
+[[[126, 321], [[453, 334], [444, 92]], [407, 91]], [[[444, 92], [453, 334]], [126, 321]]]
+place and matrix pointkolkata(1,3)
+kolkata(1,3) :
+[[[125, 320], [[487, 321], [490, 100], [511, 102]], [544, 103]], [[[511, 102], [490, 100], [487, 321]], [125, 320]]]
